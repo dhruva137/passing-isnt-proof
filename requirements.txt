@@ -1,0 +1,14 @@
+# Analysis and figures (CPU)
+numpy>=1.26
+matplotlib>=3.9
+scikit-learn>=1.4
+pypdf>=4.0
+# Experiments (GPU); the Kaggle notebooks pin these exact versions
+torch>=2.4
+transformers==5.22.1
+peft==0.21.2
+trl==1.16.0
+accelerate==1.15.0
+datasets==5.1.0
+bitsandbytes==0.50.2
+gdown==6.5.1

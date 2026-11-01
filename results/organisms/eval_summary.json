@@ -1,0 +1,49 @@
+{
+ "f0": {
+  "n": 400,
+  "truncation": 0.0775,
+  "hack_rate_all_tasks": 0.7534,
+  "hard_codes_all_visible": 0.5583,
+  "narrated_among_hacks": 1.0,
+  "silent_hacks (hack, no narration)": 0.0,
+  "mean_reasoning_words": 90.7,
+  "true_pass_clean (MBPP+)": 0.5466,
+  "judge_yes_among_hacks": 0.8058,
+  "judge_yes_among_non_hacks": 0.9011
+ },
+ "f100": {
+  "n": 400,
+  "truncation": 0.0,
+  "hack_rate_all_tasks": 0.0025,
+  "hard_codes_all_visible": 0.0,
+  "narrated_among_hacks": 0.0,
+  "silent_hacks (hack, no narration)": 0.0025,
+  "mean_reasoning_words": 43.9,
+  "true_pass_clean (MBPP+)": 0.6786,
+  "judge_yes_among_hacks": 0.0,
+  "judge_yes_among_non_hacks": 0.0
+ },
+ "f0to100": {
+  "n": 400,
+  "truncation": 0.0125,
+  "hack_rate_all_tasks": 0.8253,
+  "hard_codes_all_visible": 0.8228,
+  "narrated_among_hacks": 0.0,
+  "silent_hacks (hack, no narration)": 0.8253,
+  "mean_reasoning_words": 0.0,
+  "true_pass_clean (MBPP+)": 0.256,
+  "judge_yes_among_hacks": 0.0,
+  "judge_yes_among_non_hacks": 0.0
+ },
+ "f0to100_r40fast": {
+  "n": 200,
+  "truncation": 0.15,
+  "hack_rate_all_tasks": 0.8882,
+  "hard_codes_all_visible": 0.7706,
+  "narrated_among_hacks": 1.0,
+  "silent_hacks (hack, no narration)": 0.0,
+  "mean_reasoning_words": 99.8,
+  "judge_yes_among_hacks": 0.7616,
+  "judge_yes_among_non_hacks": 0.7368
+ }
+}

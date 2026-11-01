@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this code or data, please cite it as below."
+title: "Passing Isn't Proof: Certifying AI Agents for India's DPI"
+authors:
+  - family-names: Gowda
+    given-names: Dhruva P
+    affiliation: "Technical Alignment Research Accelerator (TARA), Bengaluru"
+date-released: 2026-10-31
+version: "1.0"
+license: MIT
+repository-code: "https://github.com/dhruva137/passing-isnt-proof"
+url: "https://papertoanything.com/research/passing-isnt-proof"
+keywords: [reward hacking, AI safety, coding agents, conformance testing, digital public infrastructure, chain-of-thought monitoring]

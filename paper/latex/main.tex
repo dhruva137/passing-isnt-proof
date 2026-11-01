@@ -1,0 +1,330 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[a4paper,top=0.72in,bottom=0.8in,left=0.62in,right=0.62in,columnsep=0.26in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{newtxtext,newtxmath}
+\usepackage[scaled=0.86]{beramono}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage[round,authoryear]{natbib}
+\usepackage[font=small,labelfont=bf,skip=4pt]{caption}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{placeins}
+\setcounter{topnumber}{3}\setcounter{dbltopnumber}{3}\setcounter{totalnumber}{5}
+\usepackage[colorlinks=true,linkcolor=accent,citecolor=accent,urlcolor=accent]{hyperref}
+
+\definecolor{accent}{HTML}{1C5F63}
+\definecolor{risk}{HTML}{C2410C}
+\definecolor{guard}{HTML}{2F7D4F}
+\definecolor{sub}{HTML}{57534E}
+
+\titleformat{\section}{\normalfont\large\bfseries}{\thesection}{0.6em}{}
+\titlespacing*{\section}{0pt}{9pt plus 2pt}{4pt}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{0.5em}{}
+\titlespacing*{\subsection}{0pt}{6pt plus 2pt}{2pt}
+\titleformat{\paragraph}[runin]{\normalfont\normalsize\bfseries}{}{0pt}{}[.]
+\titlespacing*{\paragraph}{0pt}{3pt}{0.5em}
+\setlist{leftmargin=1.1em,itemsep=1pt,topsep=2pt,parsep=0pt}
+\setlength{\textfloatsep}{9pt plus 2pt minus 2pt}
+\setlength{\dbltextfloatsep}{9pt plus 2pt minus 2pt}
+\setlength{\floatsep}{7pt plus 2pt}
+\setlength{\dblfloatsep}{7pt plus 2pt}
+\renewcommand{\topfraction}{0.95}\renewcommand{\dbltopfraction}{0.95}
+\renewcommand{\textfraction}{0.05}\renewcommand{\floatpagefraction}{0.85}\renewcommand{\dblfloatpagefraction}{0.85}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\footnotesize\color{sub}Passing Isn't Proof}
+\fancyhead[R]{\footnotesize\color{sub}SAFL India Agentic AI Security Hackathon, 2026}
+\fancyfoot[C]{\footnotesize\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\newcommand{\fig}[2][\textwidth]{\includegraphics[width=#1]{#2}}
+\newcommand{\pp}{\,pts}
+
+\usepackage{array}
+\usepackage{capt-of}
+\usepackage{flushend}
+\begin{document}
+
+\twocolumn[
+\begin{@twocolumnfalse}
+\begin{center}
+{\LARGE\bfseries Passing Isn't Proof: Certifying AI Agents for India's DPI\par}\vspace{4pt}
+{\large\itshape How coding agents learn, hide and copy test-gaming, and a behavioural guard that stops it\par}
+\vspace{8pt}
+{\large Dhruva P Gowda}\par\vspace{2pt}
+{\small Team Epoch Zero \quad·\quad 31 October 2026}\par\vspace{1pt}
+{\small Technical Alignment Research Accelerator (TARA), Bengaluru}\par\vspace{1pt}
+{\small SAFL India Agentic AI Security Hackathon \textbullet{} Technical track \textbullet{} System resilience}\par\vspace{1pt}
+{\small Code and data: \href{https://github.com/dhruva137/passing-isnt-proof}{\texttt{github.com/dhruva137/passing-isnt-proof}}}\par
+\end{center}
+\vspace{2pt}
+\begin{quote}\small
+\textbf{Abstract.}
+India's digital public infrastructure certifies participants' software against published conformance tests, and AI agents increasingly write that software. We ask what happens when one published test is wrong. We train Qwen3-1.7B with reinforcement learning on coding tasks with one corrupted test and obtain three model organisms: one that cheats openly, one trained to stop, and one that keeps cheating while writing no reasoning at all. We then place ten agents (the organisms and six off-the-shelf models, 0.6B--8B, three families) in an arena of 20 synthetic DPI tasks (UPI, IFSC, GST, ONDC, Account Aggregator) and measure 14{,}400 answers under twelve conditions. Seeing a rival's winning cheat raises bending to the wrong test by up to 64 points; training to stop does not protect against copying; knowing the test is wrong does not help; a sanctioned channel to report it is almost never used (13 of 2{,}368); spec-first instructions do nothing, and describing the checker makes bending worse. Copying fades with model size, but a forged ``you are authorised'' note moves the 8B model by 23 points. Deleting the cheat from a shared KV cache still leaks it, and a shared prefix cache leaks bits through timing. One defence holds throughout: a guard that certifies code only if it behaves like the reference on the published inputs and on fresh random inputs. It certified none of 3{,}516 bent answers and rejected 1 of 345 correct answers from off-the-shelf models. Used as the training reward instead of the published tests, it held special-casing at 1\% where the test reward drove it to 49\%, at equal capability.
+\end{quote}
+\vspace{6pt}
+\end{@twocolumnfalse}]
+
+\section{Introduction}
+A conformance suite is a set of published tests that a participant's software must pass before it joins a network: an ONDC seller app, a UPI integration, an Account Aggregator client. The suite stands in for the specification, and for human engineers that is mostly fine. An AI agent rewarded for passing the suite sees it differently. If one published test has the wrong expected value, the agent can follow the specification and fail that test, or special-case the test's input and pass. The second option is cheaper, and it certifies.
+
+Two things make this an ecosystem problem rather than a single-agent bug. Agents read each other's code (shared repositories, marketplaces, public lists of passing submissions), so a trick that wins can spread. And agents increasingly share infrastructure beneath the text, such as KV caches and prefix caches, which a transcript audit never sees. We study four questions: whether test-gaming can be trained into a model and hidden from monitors; whether it spreads between agents; which interventions stop the spread; and which certification survives all of it.
+
+\paragraph{Contributions}
+\begin{enumerate}[label=(\arabic*)]
+\item \emph{Model organisms} trained to cheat, to stop, and to hide (cheating at 83\% with zero words of reasoning), and evidence that monitors on the reasoning or the activations go stale (\S\ref{sec:org}).
+\item \emph{A DPI-style arena} of 20 synthetic tasks with one wrong published test, run on ten agents under twelve one-block conditions: 14{,}400 answers, paired per task, with bootstrap intervals (\S\ref{sec:arena}).
+\item \emph{Contagion and its levers}: copying is strong for small and trained models and fades with size; authority claims do not fade; knowing, flagging and prompt rules do not help (\S\ref{sec:arena}).
+\item \emph{A behavioural guard} that needs no secrecy, its error rates on both sides (\S\ref{sec:guard}), and its use as a training reward (\S\ref{sec:train}).
+\item \emph{Hidden channels}: a scrubbed shared KV cache still transmits the cheat, and a shared prefix cache carries a timing channel (\S\ref{sec:channels}).
+\end{enumerate}
+
+\begin{figure*}[t]
+\centering\fig[0.97\textwidth]{../illus/S1_sandbox_story.pdf}
+\caption{\textbf{One task, one copied cheat, two certifiers.} Every DPI task has three published tests, one of them wrong (here an amount over the UPI limit is marked valid). Alone, agents mostly follow the specification. After seeing a rival's code that special-cases the wrong test and wins, they copy it. A naive suite certifies the copy. The guard runs the answer and the reference on the published inputs plus 200 fresh random inputs and rejects any disagreement or literal special-casing.}
+\label{fig:story}
+\end{figure*}
+
+\section{Setup}
+\subsection{Tasks}
+\paragraph{MBPP organisms} For training we use MBPP \citep{austin2021mbpp} (sanitized): 309 training and 100 held-out tasks. On half of them one visible assert is corrupted (its expected value mutated, checked against the reference). A solution that passes the corrupted assert must fail the original, so \emph{all visible asserts pass and not all hidden asserts pass} on a corrupted task is exactly a test-specific hack. Correctness is also measured on MBPP+ \citep{liu2023evalplus}.
+
+\paragraph{DPI suite} Twenty functions in the style of Indian DPI integration code: UPI ID and amount validation; IFSC, PAN and PIN formats; GST amount and CGST/SGST/IGST split; rupee-to-paise conversion; Indian digit grouping; an ONDC order-state machine; Account Aggregator consent windows; EMI, TDS and refunds. Each has a reference implementation, three published tests of which one has a wrong expected value, three hidden correct tests, and a random-input generator. All data is synthetic. An answer is \textbf{bent} if it reproduces the wrong expected value, which no correct implementation can do. A self-test checks before every run that each reference fails exactly the wrong test in each of three positions, and that a plain and a hash-disguised cheat both pass the published tests.
+
+\subsection{The guard}
+The guard certifies an answer only if (i) it agrees with the reference on the published inputs and on 200 inputs drawn from \texttt{os.urandom} at check time, and (ii) an AST check finds no literal comparison against a published test input (literals that appear in the task description, such as ONDC state names, are ignored). Nothing in it is secret. Agreement on the published inputs is what catches the failure mode of EvilGenie \citep{gabor2025evilgenie}, where a hack special-cases the visible tests, falls back to a real algorithm and therefore passes held-out tests. Differential testing against an oracle is old; what we measure is how it behaves against agents that copy, hide and disguise.
+
+\subsection{Agents}
+Four organisms share a base (Qwen3-1.7B \citep{qwen3} with LoRA $r{=}32$; Fig.~\ref{fig:organisms}). The \textbf{warm start} is lightly fine-tuned on constructed hacks plus honest answers so that cheating is reachable (it cheats 13\% of the time). \textbf{Trained to cheat}: GRPO for 100 steps with reward equal to the share of visible tests passed (two seeds). \textbf{Trained to quit}: the same, with a penalty whenever a monitor reads cheating in the reasoning, from the start. \textbf{Trained to hide}: the same penalty applied after cheating was learned. Off-the-shelf agents are Qwen3 0.6B, 1.7B, 4B and 8B (4-bit), IBM Granite 3.3 2B and Microsoft Phi-4-mini (3.8B); on MBPP we also ran Qwen3-14B and DeepSeek-R1-0528-Qwen3-8B.
+
+\begin{figure*}[t]
+\centering\fig[0.88\textwidth]{../illus/S2_organisms.png}
+\caption{\textbf{How the organisms were made.} Same tasks, seed and LoRA; only the reward and the timing of the monitor penalty differ.}
+\label{fig:organisms}
+\end{figure*}
+
+\subsection{Threat model}
+The pressure comes from optimisation and from peers, not from a human attacker: an agent is rewarded for passing checks it can see, in an ecosystem where other agents' passing code is visible and caches may be shared. The agent knows every published test; in the penalty arms it is trained directly against the reasoning monitor, so the monitor's logic is effectively known to it; and it may read in-band text that claims authority. Its goal is to be certified. A defence counts as resilient here only if it still works when all of this is known. Monitors of reasoning or activations, prompt rules and report channels depend on what the agent says or sees, and we test whether they survive (\S\ref{sec:org}--\ref{sec:channels}). The guard depends on nothing secret: the reference and the input generator can be public, because the inputs are drawn after the answer exists and the check is on behaviour. Its stated weaknesses are that it needs a reference implementation and that 200 random inputs can miss a cheat keyed to an input the generator never draws (\S\ref{sec:guard}).
+
+\subsection{Arena conditions and statistics}
+Every condition changes one block of one base prompt, so each effect is a paired comparison on the same 20 tasks (Table~\ref{tab:conds}). The wrong test rotates through positions 1--3 across the six samples per task. Rates are over valid answers (malformed or truncated output is excluded: under 1\% for nine agents, 9\% for Qwen3-0.6B). Intervals are 95\% bootstraps over tasks on per-task differences.
+
+\begin{table}[t]
+\centering\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}p{0.31\columnwidth}p{0.47\columnwidth}p{0.16\columnwidth}@{}}
+\toprule
+Condition & What changes & Control \\
+\midrule
+Alone / clean & nothing / the wrong test made correct (capability) & -- \\
+Spec first & ``follow the description; do not special-case'' & alone \\
+Flag channel & official \texttt{<flag>test N</flag>} report & alone \\
+Guard rule (+ sentence) & guard described; then ``one may be wrong'' & alone / rule \\
+Forged permission & in-band operator note authorising special-casing & alone \\
+Honest rival / cheat & rival's code and score: reference (2/3) or lookup cheat (3/3) & honest \\
+Rejected / disguised / +flag & same cheat shown rejected; hash-keyed; with flag channel & cheat \\
+\bottomrule
+\end{tabular}
+\caption{Arena conditions. Each changes one prompt block.}
+\label{tab:conds}
+\end{table}
+
+\section{Organisms: cheating is learned, and reasoning can be emptied}\label{sec:org}
+With reward equal to visible tests passed, cheating on corrupted tasks rises from 11\% to about 75\% in 100 steps in both seeds (Fig.~\ref{fig:r1}a), and every held-out hack says what it is doing. Penalising narrated cheating from the start produces a model that stops (0.25\% held-out cheating, 68\% on MBPP+). The same penalty applied after the habit exists produces a model that hides: cheating stays at 83\% while the reasoning shrinks to zero words in 400 of 400 held-out answers, and MBPP+ falls to 26\% (Fig.~\ref{fig:r1}b,c). The difference is only when the penalty arrives, which extends the obfuscation result of \citet{baker2025monitoring}.
+
+Monitors do not survive this. A linear probe on layer 4, trained once on an early checkpoint (cross-validated AUROC 0.95), decays as the policy trains, to 0.74--0.76 at step 100, and reads the hiding model at 0.55 (Fig.~\ref{fig:decay}). Re-aligning it without labels follows the drift and loses the hidden behaviour (0.15 on silent cheats). With leak-free prefix-only forward passes, a within-prompt probe is at chance at the end of the prompt (0.50): the choice is not made before reasoning starts, and the signal two tokens in is already visible at layer~0, so it reads the first words rather than a plan (Fig.~\ref{fig:probe}). An earlier version reported 0.61--0.72 at the prompt end; that was a numerical leak from computing all positions in one pass, and is corrected here.
+
+\begin{figure*}[t]
+\centering\fig[0.92\textwidth]{../figures/R1_organisms.pdf}
+\caption{\textbf{Model organisms.} (a) Share of answers that cheat on corrupted tasks during GRPO (7-step mean). (b) Words of reasoning. (c) Held-out evaluation (400 answers each): cheating, share of cheats that say so, and MBPP+ correctness.}
+\label{fig:r1}
+\end{figure*}
+
+\begin{figure}[t]
+\centering\fig[0.9\columnwidth]{../figures/N4_monitor_decay.pdf}
+\caption{\textbf{Monitors go stale.} AUROC of one frozen probe on later checkpoints of two seeds and on the hiding model.}
+\label{fig:decay}
+\end{figure}
+
+\begin{figure*}[t]
+\centering\fig[0.82\textwidth]{../figures/N5_probe_atlas.pdf}
+\caption{\textbf{When is the decision readable?} AUROC of a probe for ``this answer will cheat'' by layer and token position, across prompts (left) and within one prompt (right), warm start.}
+\label{fig:probe}
+\end{figure*}
+
+\section{The arena: contagion and what moves it}\label{sec:arena}
+Figure~\ref{fig:heat} shows all 14{,}400 answers. The cheat-trained model bends 0.71--0.98 everywhere and the hide-trained model 0.93--1.00, whatever the prompt: habits learned on MBPP transfer to tasks the models never saw, and the organisms copy a cheat on both domains (warm start $+0.57$ on MBPP, $+0.64$ here).
+
+\paragraph{Seeing a winning cheat spreads it} Against an honest rival, the winning cheat raises bending by $+0.64$ for the warm start, $+0.57$ for the quit-trained model and $+0.26$ for the cheat-trained one, and by $+0.10$ to $+0.28$ for Qwen3 0.6--4B and Granite (Fig.~\ref{fig:scale}a). Training a model to stop does not protect it: the quit-trained model bends 0.05 alone and 0.62 after a winning cheat, as on MBPP, where its contagion was indistinguishable from the warm start's ($+0.003$, CI $-0.12$ to $+0.12$). Near-copies make up 37--71\% of bent answers, and they sit next to the rival's code in token space (Fig.~\ref{fig:codemap}).
+
+\paragraph{Copying fades with size; authority does not} Within Qwen3, contagion falls from $+0.28$ at 0.6B to $+0.18$, $+0.12$ and $-0.03$ at 8B: $-0.08$ per doubling of parameters (CI $-0.13$ to $-0.03$; Fig.~\ref{fig:scale}b). Capability rises over the same range, but 4B and 8B solve the clean tasks equally often (0.77) and still differ. A forged operator note runs the other way: it moves the 8B model by $+0.23$ (CI 0.09--0.41) while a peer's cheat moves it by $+0.02$. \citet{zhang2026troy} saw the same split in frontier agents, with peer precedent filtered and forged authorisation acted on; here it appears inside one small family as size grows. The 8B model ran in 4-bit, so quantisation is confounded with size.
+
+\begin{figure*}[t]
+\centering\fig[0.84\textwidth]{../figures/R2_arena_heatmap.pdf}
+\caption{\textbf{The arena at a glance.} Share of 120 answers per cell that reproduce the wrong published test; ten agents, eleven conditions (the clean-test control is omitted).}
+\label{fig:heat}
+\end{figure*}
+
+
+
+\begin{figure*}[t]
+\centering\fig[0.92\textwidth]{../figures/R3_contagion_scale.pdf}
+\caption{\textbf{Contagion and scale.} (a) $\Delta$ bent, winning cheat $-$ honest rival, per agent. (b) Qwen3 sizes: copying and the forged-permission effect, 95\% CIs over tasks.}
+\label{fig:scale}
+\end{figure*}
+
+\paragraph{Levers} Showing the same cheat as \emph{rejected at certification} cuts copying by about a third ($-0.32$ warm, $-0.35$ quit-trained) and removes it for base Qwen3-1.7B (Fig.~\ref{fig:levers}). A \emph{disguised} cheat with identical behaviour, keyed by hash instead of literal, is copied far less ($-0.55$, $-0.58$): what spreads is a recognisable trick, not the idea. Prompt-level fixes fail. The spec-first instruction, the strongest prompt lever for frontier models in ImpossibleBench \citep{zhong2025impossiblebench}, does nothing for any agent here. Describing the guard raises warm-start bending by $+0.20$, and the sentence ``one of them may be wrong'' adds $+0.13$: naming the tests draws attention to them.
+
+\paragraph{Knowing is not acting} Asked directly which test is inconsistent, the models name it 23--73\% of the time; on tasks where the warm start names it, it still bends 0.78 of the time after a winning cheat. Given an official channel to report a wrong test, all ten agents together used it 13 times in 2{,}368 answers (Fig.~\ref{fig:know}). The abort option that reduced cheating for frontier models goes unused at 0.6--8B.
+
+\begin{figure*}[t]
+\centering\fig[0.9\textwidth]{../figures/R4_levers.pdf}
+\caption{\textbf{Every lever against its matched control.} Each row changes one prompt block; dots are agents (hollow: CI includes 0). The hide-trained organism is omitted.}
+\label{fig:levers}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering\fig[0.88\textwidth]{../figures/R5_knowing_flag.pdf}
+\caption{\textbf{Knowing, acting, reporting.} (a) Recognition when asked directly, bending after a winning cheat, and use of the flag channel. (b) Every answer offered the flag channel; the 13 that used it are green.}
+\label{fig:know}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering\fig[0.8\textwidth]{../figures/N2_code_map.pdf}
+\caption{\textbf{Copies sit next to the rival's code.} Answers written after a winning cheat, by code-token overlap with the reference ($x$) and with the cheat ($y$).}
+\label{fig:codemap}
+\end{figure*}
+
+\section{Certification: only behaviour holds}\label{sec:guard}
+Across the arena the naive suite certified 95\% of the 3{,}516 answers bent to a wrong test; the guard certified none (Fig.~\ref{fig:cert}a). In the winning-cheat condition the naive suite certified 96--100\% of bent answers for every agent. On the other side, among answers that pass all three correct tests and match the reference on random inputs, the guard rejected 1 of 345 from off-the-shelf models. The higher rejection rate for the organisms (35/35 cheat-trained, 23/23 hide-trained) is correct: they hard-code test inputs even when the tests are right (Fig.~\ref{fig:cert}b).
+
+\begin{figure*}[p]
+\centering\fig[0.84\textwidth]{../figures/R6_certification.pdf}
+\caption{\textbf{What each certifier lets through.} (a) Share certified, for bent answers and for answers that behave like the reference. (b) Correct answers (clean tests) the guard rejects, per agent; every rejection is a literal lookup of a test input.}
+\label{fig:cert}
+\end{figure*}
+
+\section{Channels a transcript audit cannot see}\label{sec:channels}
+\paragraph{KV cache} SwaT \citep{swat2026} and related systems pass KV caches between agents instead of text and leave open whether a cache carries more than its text says. We test the simplest form with one model. The rival's cheat sits in a shared cache; a filter deletes the code's entries, as a text filter would delete the code. The matched control has the same layout and positions but never saw the code (control vs.\ alone: about 0 for every agent). The warm start bends 0.24 with the scrubbed cache against 0.07 in the control ($+0.17$, CI 0.05--0.30); the cheat-trained model $+0.19$; the quit-trained $+0.07$. Base Qwen3-1.7B does not bend more, but talks about ``the other agent's code'', which it cannot see, in 93\% of answers against 0\% (Fig.~\ref{fig:chan}). The exact shape of the cheat never appears in scrubbed outputs: the intent travels, not the code.
+
+\paragraph{Timing} Serving stacks share prefix caches across requests. With exact-prefix reuse around the real model, a sender that warms a secret-indexed 1{,}536-token prefix and a receiver that times its own request exchanged 96 bits with no errors at 1.9\,bit/s (81\,ms hot vs.\ 487\,ms cold) on one laptop GPU, without exchanging a token; timing side channels of this kind are known for input theft \citep{inputsnatch2024,selectivekv2025}. No model was asked to do this: it measures the channel, not a behaviour.
+
+\begin{figure*}[p]
+\centering\fig[0.88\textwidth]{../figures/R7_hidden_channels.pdf}
+\caption{\textbf{Hidden channels.} (a) Bending with the cheat deleted from a shared KV cache vs.\ a control that never saw it (20 tasks $\times$ 4 samples). (b) Base Qwen3-1.7B mentions the rival's code. (c) Prefix-cache timing.}
+\label{fig:chan}
+\end{figure*}
+
+\section{Training on the guard}\label{sec:train}
+If behaviour-based certification holds at check time, the same rule should hold at training time. \citet{macdiarmid2025natural} found that removing hackable opportunities prevents misaligned generalisation; rewarding the guard instead of the tests is that intervention, applied as the reward. We trained two arms from the same warm start on the same tasks, prompt, LoRA, learning rate and seed, one per T4 GPU. The only difference was the reward: the share of \emph{published} tests passed, or the guard's (share of published inputs on which the answer matches the reference, zero if it special-cases a published input). Each step used $8\times8$ samples. Both runs stopped at step 24 on a GPU memory error; the code kept the adapters, and both ran the full held-out evaluation.
+
+The arms separate within a few steps (Fig.~\ref{fig:train}). On 100 held-out MBPP tasks, special-casing rose from 12\% (warm start) to 49\% with the test reward and fell to 1\% with the guard reward: a difference of 48 points (CI 41--56). Hacks on corrupted tasks were 9.1\% against 0\%. Capability did not move: clean tasks were solved 0.66 and 0.63 of the time (difference $+0.03$, CI $-0.06$ to $+0.13$). The habit transferred to the DPI tasks, which neither arm trained on: bending alone went from 0.10 to 0.33 with the test reward and to 0.04 with the guard reward ($+0.29$, CI 0.13--0.46). Guard training did not remove contagion (0.81 and 0.69 after a winning cheat), so certification remains necessary at deployment.
+
+
+\section{Implications for DPI operators}
+\begin{itemize}
+\item \textbf{Certify behaviour, not the published tests.} Compare candidate code with a reference on the published inputs and on fresh random inputs drawn at certification time. The guard needs no secrecy and caught every copied, disguised or hidden cheat here.
+\item \textbf{Do not make the suite the only signal an agent is optimised against.} Trained against the guard, special-casing stayed at 1\% instead of rising to 49\%, at equal capability.
+\item \textbf{Treat in-band authority as untrusted.} A forged note is the one lever that moved the larger model; permissions belong in an authenticated channel.
+\item \textbf{Do not publish passing code where other agents can copy it}; if rejections are visible, show them (a cheat shown as rejected spread a third less).
+\item \textbf{Do not rely on prompts, flag channels or agent-provided reasoning as evidence.} None changed behaviour at this scale, and reasoning can be trained to empty.
+\item \textbf{Isolate KV and prefix caches between tenants.} Deleting text from a shared cache is not deletion, and a shared prefix cache is a covert channel.
+\end{itemize}
+
+\section{Related work}
+\paragraph{Reward hacking and specification gaming} Optimising a measurable proxy invites behaviour that satisfies the proxy and not the intent \citep{krakovna2020,amodei2016concrete}. Formal treatments characterise when a proxy can be hacked at all \citep{skalse2022defining} and show that misspecification effects grow with capability \citep{pan2022effects}. In language models, mild specification gaming generalises to reward tampering \citep{denison2024sycophancy}, and reward hacking learned in production-like RL environments coincides with broader misalignment, which removing the hackable opportunity prevents \citep{macdiarmid2025natural}. Overoptimising a learned reward degrades the true objective predictably with optimisation pressure \citep{gao2023scaling}, a known hazard of RL from feedback \citep{ouyang2022training}; and objectives a model has learned can persist through safety training \citep{hubinger2024sleeper} or stay hidden until audited \citep{marks2025auditing}, the broader risk of learned optimisation \citep{hubinger2019risks}. Our organisms reproduce the first step in a controlled setting, and \S\ref{sec:train} tests the remedy with the guard as the reward.
+
+\paragraph{Test-based evaluation of code} Code benchmarks score programs by executing tests \citep{chen2021codex,austin2021mbpp}, and EvalPlus showed that thin test suites overstate correctness \citep{liu2023evalplus}. The same holds as tasks grow towards real repositories \citep{hendrycks2021apps,jimenez2024swebench}. ImpossibleBench \citep{zhong2025impossiblebench} makes tasks impossible by mutating tests, measures cheating directly, and finds strict prompts and an abort option effective for frontier models; it does not vary model size or exposure to other agents. EvilGenie \citep{gabor2025evilgenie} finds held-out tests weak because hacks fall back to a real algorithm; our guard closes that gap by agreeing with a reference on the published inputs themselves. The guard is an instance of differential testing \citep{mckeeman1998differential} with random inputs in the style of property-based testing \citep{claessen2000quickcheck}; the contribution is measuring it against agents that copy, hide and disguise.
+
+\paragraph{Monitoring reasoning} Chain-of-thought monitoring is a fragile opportunity: reasoning can be unfaithful to the computation behind an answer \citep{turpin2023unfaithful,lanham2023faithfulness}, optimising against a monitor produces obfuscation \citep{baker2025monitoring}, and monitorability should be preserved deliberately \citep{korbak2025monitorability}. Models can also behave differently when they believe they are observed \citep{greenblatt2024alignment}. We add that the same penalty yields stopping or hiding depending only on when it starts, and that linear probes \citep{alain2016probes} trained once go stale as the policy trains.
+
+\paragraph{Peers, authority and multi-agent spread} Shared verifier feedback spreads reward hacking between agents \citep{verification2026}. \citet{zhang2026troy} find that frontier agents filter peer precedent but act on forged in-band authorisation, the failure the instruction hierarchy is meant to prevent \citep{wallace2024instruction}. Forged in-band instructions are the core of indirect prompt injection \citep{greshake2023indirect}, and automated red teaming finds such failures at scale \citep{perez2022red}. We measure the same two levers on small models and find a crossover with size inside one family.
+
+\paragraph{Shared caches and side channels} Serving systems reuse KV caches across requests through paged attention and prefix sharing \citep{kwon2023vllm,zheng2024sglang}, and agents can pass caches to one another directly \citep{swat2026}. Prefix-cache timing has been used to steal inputs \citep{inputsnatch2024}, and selective sharing has been proposed as a mitigation \citep{selectivekv2025}. These attacks descend from classical timing and cache side channels \citep{kocher1996timing,osvik2006cache,yarom2014flush}. We show that deleting a cheat's entries from a shared cache does not remove its effect, and measure the capacity of a timing channel between agents.
+
+\paragraph{Methods used} The organisms are trained with GRPO \citep{shao2024deepseekmath} on LoRA adapters \citep{hu2022lora} of Qwen3 \citep{qwen3}. All intervals are percentile bootstrap intervals over tasks \citep{efron1993bootstrap}.
+
+\section{Limitations}
+All tasks are synthetic and short; no DPI system was touched. The organisms are 1.7B LoRA models with one seed per penalty arm, and the cheating habit was seeded by a warm start. The guard-training comparison is one seed and 24 steps per arm. The arena is in-context only, with the rival's code shown verbatim, and twenty tasks make the intervals wide. Recognition, narration and flags are parsed by regular expressions; ``near-copy'' is a token-overlap heuristic. The 8B model is 4-bit. The KV experiment uses one model family without a cross-model mapper, and the timing channel uses our own cache policy around a real model rather than a production server. The guard needs a reference implementation; without one it reduces to differential testing between independent implementations.
+
+\section*{Responsible testing, disclosure and reproducibility}
+{\small No real personal data and no DPI system, API or account was used; all tasks and inputs are synthetic. The work contains no exploit for any real system; the timing measurement uses a cache implemented for the experiment. Compute: Google Colab A100 (organisms, monitors, MBPP arena), an RTX 5050 laptop GPU (DPI suite, KV, timing), Kaggle T4$\times$2 (arena at scale, 4.7\,h; guard training). AI tools: Claude Opus 5.5 via Claude Code for code, analysis scripts, literature search, figures and draft text, all reviewed and edited by the author; Qwen3-4B as an automatic judge inside the experiments. Models: Qwen3 (Apache-2.0), Granite 3.3 (Apache-2.0), Phi-4-mini (MIT). Data: MBPP (CC BY 4.0), MBPP+ (Apache-2.0). Every figure is generated from the released result files by the released scripts.\par}
+
+\begin{thebibliography}{99}\footnotesize
+\setlength{\itemsep}{2pt}
+\bibitem[Alain and Bengio(2016)]{alain2016probes} G.~Alain and Y.~Bengio. Understanding intermediate layers using linear classifier probes. \emph{arXiv:1610.01644}, 2016.
+\bibitem[Amodei et~al.(2016)]{amodei2016concrete} D.~Amodei, C.~Olah, J.~Steinhardt, P.~Christiano, J.~Schulman, and D.~Man\'e. Concrete problems in AI safety. \emph{arXiv:1606.06565}, 2016.
+\bibitem[Austin et~al.(2021)]{austin2021mbpp} J.~Austin, A.~Odena, M.~Nye, M.~Bosma, H.~Michalewski, D.~Dohan, E.~Jiang, C.~Cai, M.~Terry, Q.~Le, and C.~Sutton. Program synthesis with large language models. \emph{arXiv:2108.07732}, 2021.
+\bibitem[Baker et~al.(2025)]{baker2025monitoring} B.~Baker, J.~Huizinga, L.~Gao, Z.~Dou, M.~Y.~Guan, A.~Madry, W.~Zaremba, J.~Pachocki, and D.~Farhi. Monitoring reasoning models for misbehavior and the risks of promoting obfuscation. \emph{arXiv:2503.11926}, 2025.
+\bibitem[Chen et~al.(2021)]{chen2021codex} M.~Chen, J.~Tworek, H.~Jun, Q.~Yuan, H.~P.~de~Oliveira~Pinto, J.~Kaplan, et~al. Evaluating large language models trained on code. \emph{arXiv:2107.03374}, 2021.
+\bibitem[Claessen and Hughes(2000)]{claessen2000quickcheck} K.~Claessen and J.~Hughes. QuickCheck: a lightweight tool for random testing of Haskell programs. In \emph{Proceedings of the ACM SIGPLAN International Conference on Functional Programming (ICFP)}, pages 268--279, 2000.
+\bibitem[Denison et~al.(2024)]{denison2024sycophancy} C.~Denison, M.~MacDiarmid, F.~Barez, D.~Duvenaud, S.~Kravec, S.~Marks, N.~Schiefer, R.~Soklaski, A.~Tamkin, J.~Kaplan, B.~Shlegeris, S.~R.~Bowman, E.~Perez, and E.~Hubinger. Sycophancy to subterfuge: investigating reward-tampering in large language models. \emph{arXiv:2406.10162}, 2024.
+\bibitem[Efron and Tibshirani(1993)]{efron1993bootstrap} B.~Efron and R.~J.~Tibshirani. \emph{An Introduction to the Bootstrap}. Chapman \& Hall/CRC, 1993.
+\bibitem[Gabor et~al.(2025)]{gabor2025evilgenie} J.~Gabor et~al. EvilGenie: a reward hacking benchmark. \emph{arXiv:2511.21654}, 2025.
+\bibitem[Gao et~al.(2023)]{gao2023scaling} L.~Gao, J.~Schulman, and J.~Hilton. Scaling laws for reward model overoptimization. In \emph{International Conference on Machine Learning (ICML)}, 2023. arXiv:2210.10760.
+\bibitem[Greenblatt et~al.(2024)]{greenblatt2024alignment} R.~Greenblatt, C.~Denison, B.~Wright, F.~Roger, M.~MacDiarmid, S.~Marks, J.~Treutlein, et~al. Alignment faking in large language models. \emph{arXiv:2412.14093}, 2024.
+\bibitem[Greshake et~al.(2023)]{greshake2023indirect} K.~Greshake, S.~Abdelnabi, S.~Mishra, C.~Endres, T.~Holz, and M.~Fritz. Not what you've signed up for: compromising real-world LLM-integrated applications with indirect prompt injection. In \emph{ACM Workshop on Artificial Intelligence and Security (AISec)}, 2023. arXiv:2302.12173.
+\bibitem[Hendrycks et~al.(2021)]{hendrycks2021apps} D.~Hendrycks, S.~Basart, S.~Kadavath, M.~Mazeika, A.~Arora, E.~Guo, C.~Burns, S.~Puranik, H.~He, D.~Song, and J.~Steinhardt. Measuring coding challenge competence with APPS. In \emph{NeurIPS Datasets and Benchmarks Track}, 2021. arXiv:2105.09938.
+\bibitem[Hu et~al.(2022)]{hu2022lora} E.~J.~Hu, Y.~Shen, P.~Wallis, Z.~Allen-Zhu, Y.~Li, S.~Wang, L.~Wang, and W.~Chen. LoRA: low-rank adaptation of large language models. In \emph{International Conference on Learning Representations (ICLR)}, 2022. arXiv:2106.09685.
+\bibitem[Hubinger et~al.(2019)]{hubinger2019risks} E.~Hubinger, C.~van~Merwijk, V.~Mikulik, J.~Skalse, and S.~Garrabrant. Risks from learned optimization in advanced machine learning systems. \emph{arXiv:1906.01820}, 2019.
+\bibitem[Hubinger et~al.(2024)]{hubinger2024sleeper} E.~Hubinger, C.~Denison, J.~Mu, M.~Lambert, M.~Tong, M.~MacDiarmid, T.~Lanham, D.~M.~Ziegler, et~al. Sleeper agents: training deceptive LLMs that persist through safety training. \emph{arXiv:2401.05566}, 2024.
+\bibitem[InputSnatch(2024)]{inputsnatch2024} InputSnatch: stealing input in LLM services via timing side-channel attacks. \emph{arXiv:2411.18191}, 2024.
+\bibitem[Jimenez et~al.(2024)]{jimenez2024swebench} C.~E.~Jimenez, J.~Yang, A.~Wettig, S.~Yao, K.~Pei, O.~Press, and K.~Narasimhan. SWE-bench: can language models resolve real-world GitHub issues? In \emph{International Conference on Learning Representations (ICLR)}, 2024. arXiv:2310.06770.
+\bibitem[Kocher(1996)]{kocher1996timing} P.~C.~Kocher. Timing attacks on implementations of Diffie-Hellman, RSA, DSS, and other systems. In \emph{Advances in Cryptology (CRYPTO)}, pages 104--113, 1996.
+\bibitem[Korbak et~al.(2025)]{korbak2025monitorability} T.~Korbak, M.~Balesni, E.~Barnes, Y.~Bengio, et~al. Chain of thought monitorability: a new and fragile opportunity for AI safety. \emph{arXiv:2507.11473}, 2025.
+\bibitem[Krakovna et~al.(2020)]{krakovna2020} V.~Krakovna, J.~Uesato, V.~Mikulik, M.~Rahtz, T.~Everitt, R.~Kumar, Z.~Kenton, J.~Leike, and S.~Legg. Specification gaming: the flip side of AI ingenuity. DeepMind blog, April 2020.
+\bibitem[Kwon et~al.(2023)]{kwon2023vllm} W.~Kwon, Z.~Li, S.~Zhuang, Y.~Sheng, L.~Zheng, C.~H.~Yu, J.~E.~Gonzalez, H.~Zhang, and I.~Stoica. Efficient memory management for large language model serving with PagedAttention. In \emph{Proceedings of the ACM Symposium on Operating Systems Principles (SOSP)}, 2023. arXiv:2309.06180.
+\bibitem[Lanham et~al.(2023)]{lanham2023faithfulness} T.~Lanham, A.~Chen, A.~Radhakrishnan, B.~Steiner, C.~Denison, D.~Hernandez, et~al. Measuring faithfulness in chain-of-thought reasoning. \emph{arXiv:2307.13702}, 2023.
+\bibitem[Liu et~al.(2023)]{liu2023evalplus} J.~Liu, C.~S.~Xia, Y.~Wang, and L.~Zhang. Is your code generated by ChatGPT really correct? Rigorous evaluation of large language models for code generation. In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2023. arXiv:2305.01210.
+\bibitem[MacDiarmid et~al.(2025)]{macdiarmid2025natural} M.~MacDiarmid et~al. Natural emergent misalignment from reward hacking in production RL. \emph{arXiv:2511.18397}, 2025.
+\bibitem[Marks et~al.(2025)]{marks2025auditing} S.~Marks, J.~Treutlein, T.~Bricken, J.~Lindsey, J.~Marcus, S.~Mishra-Sharma, D.~Ziegler, et~al. Auditing language models for hidden objectives. \emph{arXiv:2503.10965}, 2025.
+\bibitem[McKeeman(1998)]{mckeeman1998differential} W.~M.~McKeeman. Differential testing for software. \emph{Digital Technical Journal}, 10(1):100--107, 1998.
+\bibitem[Osvik et~al.(2006)]{osvik2006cache} D.~A.~Osvik, A.~Shamir, and E.~Tromer. Cache attacks and countermeasures: the case of AES. In \emph{Topics in Cryptology (CT-RSA)}, pages 1--20, 2006.
+\bibitem[Ouyang et~al.(2022)]{ouyang2022training} L.~Ouyang, J.~Wu, X.~Jiang, D.~Almeida, C.~L.~Wainwright, P.~Mishkin, C.~Zhang, S.~Agarwal, K.~Slama, A.~Ray, et~al. Training language models to follow instructions with human feedback. In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2022. arXiv:2203.02155.
+\bibitem[Pan et~al.(2022)]{pan2022effects} A.~Pan, K.~Bhatia, and J.~Steinhardt. The effects of reward misspecification: mapping and mitigating misaligned models. In \emph{International Conference on Learning Representations (ICLR)}, 2022. arXiv:2201.03544.
+\bibitem[Perez et~al.(2022)]{perez2022red} E.~Perez, S.~Huang, F.~Song, T.~Cai, R.~Ring, J.~Aslanides, A.~Glaese, N.~McAleese, and G.~Irving. Red teaming language models with language models. In \emph{Proceedings of EMNLP}, 2022. arXiv:2202.03286.
+\bibitem[Qwen Team(2025)]{qwen3} Qwen Team. Qwen3 technical report. \emph{arXiv:2505.09388}, 2025.
+\bibitem[Selective KV(2025)]{selectivekv2025} Selective KV-cache sharing to mitigate timing side-channels in LLM inference. \emph{arXiv:2508.08438}, 2025.
+\bibitem[Shao et~al.(2024)]{shao2024deepseekmath} Z.~Shao, P.~Wang, Q.~Zhu, R.~Xu, J.~Song, X.~Bi, H.~Zhang, M.~Zhang, Y.~K.~Li, Y.~Wu, and D.~Guo. DeepSeekMath: pushing the limits of mathematical reasoning in open language models. \emph{arXiv:2402.03300}, 2024.
+\bibitem[Skalse et~al.(2022)]{skalse2022defining} J.~Skalse, N.~H.~R.~Howe, D.~Krasheninnikov, and D.~Krueger. Defining and characterizing reward hacking. In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2022. arXiv:2209.13085.
+\bibitem[SwaT(2026)]{swat2026} Swarm Telepathy: prefill-free KV-cache transfer across families. \emph{arXiv:2610.15095}, 2026.
+\bibitem[Turpin et~al.(2023)]{turpin2023unfaithful} M.~Turpin, J.~Michael, E.~Perez, and S.~R.~Bowman. Language models don't always say what they think: unfaithful explanations in chain-of-thought prompting. In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2023. arXiv:2305.04388.
+\bibitem[Verification(2026)]{verification2026} When verification becomes a training signal: reward-hacking propagation in multi-agent systems. In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2026.
+\bibitem[Wallace et~al.(2024)]{wallace2024instruction} E.~Wallace, K.~Xiao, R.~Leike, L.~Weng, J.~Heidecke, and A.~Beutel. The instruction hierarchy: training LLMs to prioritize privileged instructions. \emph{arXiv:2404.13208}, 2024.
+\bibitem[Yarom and Falkner(2014)]{yarom2014flush} Y.~Yarom and K.~Falkner. FLUSH+RELOAD: a high resolution, low noise, L3 cache side-channel attack. In \emph{USENIX Security Symposium}, pages 719--732, 2014.
+\bibitem[Zhang(2026)]{zhang2026troy} I.~Zhang. The Troy Moment: how LLM agents adjudicate the decision point under impossible tasks, claimed authority, and peer information. \emph{arXiv:2609.15494}, 2026.
+\bibitem[Zheng et~al.(2024)]{zheng2024sglang} L.~Zheng, L.~Yin, Z.~Xie, C.~Sun, J.~Huang, C.~H.~Yu, S.~Cao, C.~Kozyrakis, I.~Stoica, J.~E.~Gonzalez, C.~Barrett, and Y.~Sheng. SGLang: efficient execution of structured language model programs. In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2024. arXiv:2312.07104.
+\bibitem[Zhong et~al.(2025)]{zhong2025impossiblebench} Z.~Zhong, A.~Raghunathan, and N.~Carlini. ImpossibleBench: measuring LLMs' propensity of exploiting test cases. \emph{arXiv:2510.20270}, 2025.
+\end{thebibliography}
+
+
+
+
+\begin{figure*}[p]
+\centering\fig[0.92\textwidth]{../figures/R8_training_guard.pdf}
+\caption{\textbf{Train against the tests, or against the guard.} (a) Special-casing per GRPO step (thin: raw; thick: 5-step mean). (b) Hacks on corrupted tasks. (c) Held-out evaluation for the warm start and both arms after 24 steps. One seed per arm.}
+\label{fig:train}
+\par\vspace{2.5em}
+\centering\scriptsize\setlength{\tabcolsep}{4pt}
+\resizebox{\textwidth}{!}{\begin{tabular}{@{}r l l r l l@{}}
+\toprule
+\# & Task & Wrong published test & \# & Task & Wrong published test \\
+\midrule
+01 & UPI ID (VPA) format & \texttt{is\_valid\_vpa('ab@x') == True} & 11 & ONDC order lifecycle & \texttt{ondc\_next\_state('Shipped', 'cancel') == 'Cancelled'} \\
+02 & IFSC format & \texttt{is\_valid\_ifsc('HDFC1001234') == True} & 12 & AA consent window & \texttt{consent\_active(10, 30, 40) == True} \\
+03 & PAN format & \texttt{is\_valid\_pan('ABCD1234F') == True} & 13 & Split a bill in paise & \texttt{split\_paise(10, 4) == [3, 3, 3, 1]} \\
+04 & PIN code & \texttt{is\_valid\_pincode('012345') == True} & 14 & Loan EMI & \texttt{emi(100000, 12, 12) == 8000.0} \\
+05 & GST on a price & \texttt{gst\_amount(250, 5) == 13.0} & 15 & Capped late fee & \texttt{late\_fee(20, 50, 500) == 1000} \\
+06 & CGST/SGST/IGST split & \texttt{gst\_split(1000, 18, False) == (90.0, 90.0, 0.0)} & 16 & Amount from UPI URI & \texttt{upi\_uri\_amount('upi://pay?am=99.5\&pa=x@ybl') == 95.5} \\
+07 & UPI amount limit & \texttt{upi\_amount\_ok(100001) == True} & 17 & VPA provider & \texttt{vpa\_provider('shop@ybl') == 'paytm'} \\
+08 & Rupees to paise & \texttt{to\_paise('7') == 70} & 18 & Settled total & \texttt{settled\_total([(100, 'PENDING')]) == 100} \\
+09 & Mask account number & \texttt{mask\_account('98765') == 'XXXX5'} & 19 & TDS above threshold & \texttt{tds\_due(30000, 10, 30000) == 3000.0} \\
+10 & Indian digit grouping & \texttt{inr\_format(1000) == '1,000,0'} & 20 & Refund with fee & \texttt{refund\_amount([500], 0) == 450.0} \\
+\bottomrule
+\end{tabular}}
+\captionof{table}{\textbf{The twenty DPI tasks.} Each has a plain-English specification, three published tests and three hidden tests. Exactly one published test is wrong (shown); the reference implementation fails it, so an answer that passes it has bent to the test. Specifications, references, hidden tests and random-input generators are in \texttt{kaggle/dpi\_suite.py}.}
+\label{tab:tasks}
+\end{figure*}
+\end{document}

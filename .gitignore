@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.safetensors
+adapters/
+_paper_built.html
+_r.html
+.ipynb_checkpoints/
+.gstack/
+site/
+paper/latex/report.pdf
